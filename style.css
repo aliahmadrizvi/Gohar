@@ -187,3 +187,7 @@ html[dir="rtl"] .language-toast{right:auto;left:22px;text-align:right}
   .composer-wrap{margin-bottom:12px}
 }
 .voice-unavailable{color:#9a6711!important;font-weight:700}
+
+html[lang="ur"] body,html[lang="ur"] button,html[lang="ur"] input,html[lang="ur"] textarea,html[lang="ur"] select{font-family:'Noto Nastaliq Urdu','Noto Naskh Arabic','Noto Sans Arabic',sans-serif;line-height:1.9}html[lang="ur"] .welcome,html[lang="ur"] .guide-page,html[lang="ur"] .composer,html[lang="ur"] .sidebar{text-align:right}
+
+html[lang="mr"] body,html[lang="mr"] button,html[lang="mr"] input,html[lang="mr"] textarea,html[lang="mr"] select{font-family:'Noto Sans Devanagari','Noto Sans',sans-serif}

@@ -1,83 +1,118 @@
-# Gohar
+# Gohar — AI Kheti Salahkar 🌾
 
-Open-source prototype for local-language farming guidance for smallholder farmers near Lucknow.
+Open-source AI-driven local-language farming advisor for smallholder farmers near Lucknow and across northern India.
 
-## Current status
-- Responsive HTML/CSS/JavaScript frontend.
-- FastAPI backend with a simple keyword retrieval baseline.
-- Optional local Gemma inference through an Ollama-compatible API.
-- Starter wheat and paddy knowledge notes.
-- Clear connection and model-unavailable messages in the chat UI.
-- Language selection for typed questions, browser speech input and spoken answers in 20 languages: Hindi, English, Bengali, Telugu, Marathi, Tamil, Urdu, Gujarati, Kannada, Odia, Malayalam, Punjabi, Assamese, Maithili, Bhojpuri, Kashmiri, Nepali, Santali, Sindhi and Meitei (Manipuri).
-- A seasonal checklist for Kharif, Rabi and Zaid, plus a crop nutrition guide for wheat, rice, maize, mustard and pulses with ICAR/Soil Health Card references.
+## Features & Current Status
+- **Responsive Web UI**: Accessible on mobile phones and desktop with high-contrast, clean layout.
+- **20 Indian Languages**: Hindi, English, Bengali, Telugu, Marathi, Tamil, Urdu, Gujarati, Kannada, Odia, Malayalam, Punjabi, Assamese, Maithili, Bhojpuri, Kashmiri, Nepali, Santali, Sindhi, and Meitei (Manipuri).
+- **Voice Typing & Spoken Responses**: Integrated Web Speech recognition and synthesis.
+- **Asynchronous High-Throughput Backend**: Built on FastAPI and `httpx` with connection pooling, non-blocking I/O, security headers, and GZip compression.
+- **In-Memory Knowledge Retrieval**: Preloads and indexes curated agronomy guides covering Wheat, Paddy, Mustard, Maize, and Pulses.
+- **Seasonal Guides & Crop Nutrition**: Curated checklists for Kharif, Rabi, and Zaid, with ICAR and Soil Health Card references.
+- **Production-Ready Deployment**: Includes `Dockerfile`, `docker-compose.yml`, `render.yaml`, `Procfile`, and automated CI/CD workflows.
 
-**Important:** This is a hackathon prototype, not a validated agricultural advisory service. The starter knowledge notes are not sufficient for precise crop treatment recommendations. Verify important advice with current local agricultural experts and official sources.
+> **Important:** This is an open-source prototype. Fertilizer guidance and pest recommendations are educational. Always verify critical decisions with a current Soil Health Card, product labels, and your local Krishi Vigyan Kendra (KVK).
 
-Browser speech recognition and speech synthesis are used for voice chat. Language availability and voice quality depend on the browser and installed speech services. Seasonal checklists are static reminders, not live weather, pest, or push alerts. Fertilizer guidance is educational; use a current Soil Health Card and local crop package for rates.
+---
 
-## Run locally on Windows
+## Quickstart (Local Development)
 
-From Command Prompt in the project folder, start the app:
+### 1. Prerequisites
+- Python 3.10+
+- (Optional) [Ollama](https://ollama.com/) with Gemma 4:
+  ```cmd
+  ollama run gemma4:e2b
+  ```
 
+### 2. Run with Python & Uvicorn
 ```cmd
-.venv\Scripts\python.exe -m uvicorn main:app --reload
+# Create virtual environment
+python -m venv .venv
+
+# Activate (Windows)
+.venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run server with auto-reload
+python main.py
+```
+Open `http://127.0.0.1:8000/` in your browser.
+API Health Check: `http://127.0.0.1:8000/health`
+
+### 3. Run Automated Tests
+```cmd
+pytest -v
 ```
 
-Open `http://127.0.0.1:8000/` for the UI. The API health check is `http://127.0.0.1:8000/health`.
+---
 
-If dependencies are not installed in the virtual environment, run `.venv\Scripts\python.exe -m pip install -r requirements.txt` once. This uses the virtual environment's Python and pip.
+## Deployment Options
 
-## Connect Gemma through Ollama
+### Option A: Render (One-Click / Blueprint)
+1. Fork or push this repository to GitHub.
+2. In the [Render Dashboard](https://dashboard.render.com/), choose **New → Blueprint** and connect this repository.
+3. Render reads `render.yaml` automatically and configures:
+   - Build: `pip install -r requirements.txt`
+   - Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - Health check: `/health`
+4. Set `OLLAMA_URL` in Render Environment settings to your hosted inference endpoint (e.g. `https://your-llm-host.example/api/generate`).
 
-Gohar uses Ollama's local API at `http://127.0.0.1:11434/api/generate` and defaults to `gemma4:e2b` (`GOHAR_MODEL` can override the tag).
+### Option B: Docker Container (Cloud Run / AWS / VPS)
+Build and run the Docker image:
+```bash
+docker build -t gohar-app .
+docker run -p 8000:8000 --env-file .env.example gohar-app
+```
 
-1. Install [Ollama for Windows](https://ollama.com/download/windows) and open the Ollama app. Ollama serves its local API at `http://127.0.0.1:11434`.
-2. In a new Command Prompt, download and start Gemma once:
+Or with Docker Compose:
+```bash
+docker compose up -d
+```
 
-   ```cmd
-   ollama run gemma4:e2b
-   ```
-
-   The official Ollama library currently lists this model at roughly 4.6–7.5 GB, so make sure you have enough disk space and memory. Type `/bye` after it answers.
-3. Start Gohar's backend in another Command Prompt with the commands above.
-4. Open `http://127.0.0.1:8000/` and ask a question. If the model is missing, Gohar will tell you to run `ollama pull gemma4:e2b`; if Ollama is offline, it will say to start the Ollama app.
-
-Ollama's generate endpoint accepts a model name and prompt and returns a non-streaming response when `stream` is false, which is how this backend calls it. See the [Ollama Gemma 4 tags](https://ollama.com/library/gemma4/tags), [Windows setup](https://docs.ollama.com/windows), and [generate API](https://docs.ollama.com/api/generate).
-
-## Deployment notes
-
-The public frontend currently points to `https://gohar.onrender.com`, so chat requests run on Render. In the Render Dashboard, open the `gohar` web service, choose **Environment**, and set:
-
-- `OLLAMA_URL` to the full, reachable generation endpoint, including `/api/generate` (for example, `https://your-inference-host.example/api/generate`). Do not set it to `localhost` or `127.0.0.1`: those addresses refer to the Render container, not your Windows PC.
-- `GOHAR_MODEL` to a model tag available on that inference service (for example, `gemma4:e2b`).
-- `OLLAMA_API_KEY` only if the inference service requires a Bearer token; keep it in Render's environment settings, not in source files.
-
-Save the settings and let Render deploy the updated environment. The inference endpoint must be reachable from Render and support Ollama's `/api/generate` request and response format. The local Ollama service at `http://127.0.0.1:11434` is suitable for local development only; it does not become reachable from Render automatically. For Render environment-variable steps, see [Render's environment variable documentation](https://render.com/docs/configure-environment-variables).
-
-The FastAPI app serves the frontend and API from one origin. A hosted app cannot reach Ollama running on your personal computer; configure `OLLAMA_URL` to point to an inference service reachable by the host. The backend accepts an optional `OLLAMA_API_KEY` environment variable and sends it as a Bearer token. Store that key in the hosting provider's secret settings, never in frontend files or source control. Set `GOHAR_MODEL` to the model tag accepted by that inference service. Prompts will be sent to the configured inference provider.
-
-For cross-origin hosting, set `GOHAR_ALLOWED_ORIGINS` to a comma-separated list of trusted frontend origins. Same-origin deployment does not need a CORS exception.
-
-If the frontend and backend use different public domains, set the `gohar-api-url` meta tag in `index.html` to the backend's base URL (for example, `https://your-api.example.com`, without `/chat`).
-
-## Repository layout
+### Option C: PaaS (Heroku / Railway / Fly.io)
+Deploy directly using the included `Procfile`:
 ```text
-index.html      Static web UI
-style.css       Responsive interface styles
-script.js       Chat interactions and API connection
-main.py         FastAPI API and retrieval/model call
-wheat.md        Starter wheat note
-paddy.md        Starter paddy note
-README.md       Setup and limitations
-LICENSE         Project license
-CONTRIBUTING.md Contribution guide
+web: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
-## Open-source and licensing
-Project code is offered under the MIT License. Third-party models and documents retain their own licenses/terms. Do not redistribute agricultural documents unless their terms permit it.
+---
 
-## Roadmap
-- Replace keyword retrieval with BM25 and add cited, region-specific sources.
-- Evaluate Hindi and Awadhi responses with local speakers/agriculture experts.
-- Add voice and weather API only after the core workflow is reliable.
-- Add automated tests and production request limits before public use.
+## Environment Variables
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `PORT` | `8000` | Port for the HTTP server (automatically bound by Render/Cloud Run) |
+| `HOST` | `0.0.0.0` | Host IP binding address |
+| `OLLAMA_URL` | `http://127.0.0.1:11434/api/generate` | Reachable Ollama-compatible `/api/generate` endpoint |
+| `OLLAMA_API_KEY` | *(empty)* | Optional Bearer authorization token for remote hosted inference |
+| `GOHAR_MODEL` | `gemma4:e2b` | LLM model tag accepted by the inference provider |
+| `GOHAR_OLLAMA_TIMEOUT` | `300` | Inference request timeout in seconds |
+| `GOHAR_ALLOWED_ORIGINS` | *(localhost, Render)* | Comma-separated CORS allowed origins |
+
+---
+
+## Repository Layout
+```text
+├── index.html            # Static web UI
+├── style.css             # Responsive stylesheets & animations
+├── script.js             # Client logic, voice recognition & chat
+├── main.py               # Async FastAPI server, retrieval & inference
+├── requirements.txt      # Production dependencies
+├── Dockerfile            # Container definition
+├── docker-compose.yml    # Multi-container orchestration
+├── render.yaml           # Render Blueprint specification
+├── Procfile              # PaaS process configuration
+├── .env.example          # Environment variables template
+├── test_app.py           # Automated test suite
+├── wheat.md              # Wheat agronomy knowledge note
+├── paddy.md              # Paddy / Rice agronomy knowledge note
+├── mustard.md            # Mustard agronomy knowledge note
+├── maize.md              # Maize agronomy knowledge note
+├── pulses.md             # Pulses (Gram & Arhar) agronomy knowledge note
+└── .github/workflows/    # CI and GitHub Pages deployment workflows
+```
+
+## License
+MIT License. © 2026 FourBitDevelopers.

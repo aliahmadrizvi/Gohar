@@ -1,14 +1,30 @@
 const configuredApiURL = document.querySelector('meta[name="gohar-api-url"]')?.content.trim().replace(/\/+$/, "");
 const isLocalFrontendPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname) && window.location.port !== "8000";
-const API_URL = configuredApiURL || (isLocalFrontendPreview ? `http://${window.location.hostname}:8000` : window.location.origin);
+const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const API_URL = isLocalFrontendPreview
+  ? "http://" + window.location.hostname + ":8000"
+  : isLocalHost ? window.location.origin : configuredApiURL || window.location.origin;
 const LANGUAGES = {
-  hi: { name: "Hindi", native: "हिंदी", voice: "hi-IN" }, en: { name: "English", native: "English", voice: "en-IN" }, bn: { name: "Bengali", native: "বাংলা", voice: "bn-IN" },
-  te: { name: "Telugu", native: "తెలుగు", voice: "te-IN" }, mr: { name: "Marathi", native: "मराठी", voice: "mr-IN" }, ta: { name: "Tamil", native: "தமிழ்", voice: "ta-IN" },
-  ur: { name: "Urdu", native: "اردو", voice: "ur-IN" }, gu: { name: "Gujarati", native: "ગુજરાતી", voice: "gu-IN" }, kn: { name: "Kannada", native: "ಕನ್ನಡ", voice: "kn-IN" },
-  or: { name: "Odia", native: "ଓଡ଼ିଆ", voice: "or-IN" }, ml: { name: "Malayalam", native: "മലയാളം", voice: "ml-IN" }, pa: { name: "Punjabi", native: "ਪੰਜਾਬੀ", voice: "pa-IN" },
-  as: { name: "Assamese", native: "অসমীয়া", voice: "as-IN" }, mai: { name: "Maithili", native: "मैथिली", voice: "mai-IN" }, bho: { name: "Bhojpuri", native: "भोजपुरी", voice: "bho-IN" },
-  ks: { name: "Kashmiri", native: "कॉशुर", voice: "ks-IN" }, ne: { name: "Nepali", native: "नेपाली", voice: "ne-NP" }, sat: { name: "Santali", native: "ᱥᱟᱱᱛᱟᱲᱤ", voice: "sat-IN" },
-  sd: { name: "Sindhi", native: "سنڌي", voice: "sd-IN" }, mni: { name: "Meitei (Manipuri)", native: "মেইতেইলোন্", voice: "mni-IN" },
+  en: { name: "English", native: "English", voice: "en-IN", direction: "ltr" },
+  hi: { name: "Hindi", native: "हिंदी", voice: "hi-IN", direction: "ltr" },
+  ur: { name: "Urdu", native: "اردو", voice: "ur-PK", direction: "rtl" },
+  bn: { name: "Bengali", native: "বাংলা", voice: "bn-IN", direction: "ltr" },
+  ta: { name: "Tamil", native: "தமிழ்", voice: "ta-IN", direction: "ltr" },
+  te: { name: "Telugu", native: "తెలుగు", voice: "te-IN", direction: "ltr" },
+  mr: { name: "Marathi", native: "मराठी", voice: "mr-IN", direction: "ltr" },
+  gu: { name: "Gujarati", native: "ગુજરાતી", voice: "gu-IN", direction: "ltr" },
+  kn: { name: "Kannada", native: "ಕನ್ನಡ", voice: "kn-IN", direction: "ltr" },
+  ml: { name: "Malayalam", native: "മലയാളം", voice: "ml-IN", direction: "ltr" },
+  pa: { name: "Punjabi", native: "ਪੰਜਾਬੀ", voice: "pa-IN", direction: "ltr" },
+  or: { name: "Odia", native: "ଓଡ଼ିଆ", voice: "or-IN", direction: "ltr" },
+  as: { name: "Assamese", native: "অসমীয়া", voice: "as-IN", direction: "ltr" },
+  ks: { name: "Kashmiri", native: "कॉशुर", voice: "ks-IN", direction: "rtl" },
+  sd: { name: "Sindhi", native: "سنڌي", voice: "sd-IN", direction: "rtl" },
+  ne: { name: "Nepali", native: "नेपाली", voice: "ne-NP", direction: "ltr" },
+  sa: { name: "Sanskrit", native: "संस्कृतम्", voice: "sa-IN", direction: "ltr" },
+  es: { name: "Spanish", native: "Español", voice: "es-ES", direction: "ltr" },
+  fr: { name: "French", native: "Français", voice: "fr-FR", direction: "ltr" },
+  ar: { name: "Arabic", native: "العربية", voice: "ar-SA", direction: "rtl" },
 };
 const form = document.querySelector("#chatForm");
 const input = document.querySelector("#question");
@@ -35,6 +51,8 @@ let activeMicButton = null;
 let isListening = false;
 let voiceNoSpeech = false;
 let voiceDraft = "";
+let mediaStream = null;
+let mediaRecorder = null;
 const HISTORY_KEY = "gohar-chat-history";
 const HISTORY_LIMIT = 12;
 const HISTORY_MESSAGE_LIMIT = 30;
@@ -115,10 +133,178 @@ const UI_TEXT_ATTRIBUTES = ["placeholder", "title", "aria-label", "aria-descript
 const uiTextSources = new Map();
 const uiAttributeSources = new Map();
 let uiTranslations = {};
+const BUILT_IN_URDU_UI = {
+  "✦ &nbsp; FARMING GUIDANCE IN YOUR LANGUAGE": "✦ &nbsp; آپ کی زبان میں زرعی رہنمائی",
+  "Hello, <em>farmer!</em>": "السلام علیکم، <em>کسان بھائی!</em>",
+  "What’s happening in your field today? Ask Gohar a question.<br>Gohar can help you understand farming information.": "آج آپ کے کھیت میں کیا مسئلہ ہے؟ گوہر سے سوال پوچھیں۔<br>گوہر کھیتی باڑی کی معلومات سمجھنے میں آپ کی مدد کر سکتا ہے۔",
+  "Type your question here…": "اپنا سوال یہاں لکھیں…",
+  "✦ Ask in Hindi, Awadhi, or English": "✦ ہندی، اودھی یا انگریزی میں پوچھیں",
+  "Listening… speak now": "سن رہا ہوں… اب بولیں",
+  "Gohar is preparing an answer…": "گوہر جواب تیار کر رہا ہے…",
+  "Ask by voice": "بول کر سوال پوچھیں",
+  "Send question": "سوال بھیجیں",
+  "Farm details": "کھیت کی معلومات",
+  "(optional)": "(اختیاری)",
+  "Crop": "فصل",
+  "e.g. wheat": "مثلاً گندم",
+  "Speak crop name": "فصل کا نام بولیں",
+  "Village / district": "گاؤں / ضلع",
+  "Village or district": "گاؤں یا ضلع",
+  "Speak village or district": "گاؤں یا ضلع بولیں",
+  "Crop age / stage": "فصل کی عمر / مرحلہ",
+  "e.g. 30 days, flowering": "مثلاً ۳۰ دن، پھول آنے کا وقت",
+  "Speak crop age or stage": "فصل کی عمر یا مرحلہ بولیں",
+  "Problem / symptoms": "مسئلہ / علامات",
+  "What changes are you seeing?": "آپ کو کیا تبدیلی نظر آ رہی ہے؟",
+  "Speak the crop problem or symptoms": "فصل کا مسئلہ یا علامات بولیں",
+  "Crop problem": "فصل کا مسئلہ",
+  "Yellow leaves or slow growth": "پتے پیلے یا بڑھوتری سست",
+  "Fertilizer advice": "کھاد کا مشورہ",
+  "Timing and crop stage": "وقت اور فصل کا مرحلہ",
+  "Weather information": "موسم کی معلومات",
+  "Rain and precautions": "بارش اور احتیاط",
+  "Pests and disease": "کیڑے اور بیماریاں",
+  "Possible causes and next steps": "ممکنہ وجوہات اور اگلے اقدامات",
+  "Why are my wheat leaves turning yellow?": "گندم کے پتے پیلے کیوں ہو رہے ہیں؟",
+  "When and how should I fertilize wheat?": "گندم میں کھاد کب اور کیسے ڈالنی چاہیے؟",
+  "How can I check weather information for my farm?": "میں اپنے کھیت کے لیے موسم کی معلومات کیسے دیکھوں؟",
+  "What should I check if I see pests on mustard?": "سرسوں میں کیڑے نظر آئیں تو کیا جانچنا چاہیے؟",
+  "Farmer and field details": "کسان اور کھیت کی معلومات",
+  "Question": "سوال",
+  "Voice input is unavailable in this browser. Try Chrome or Edge.": "اس براؤزر میں آواز سے سوال پوچھنا دستیاب نہیں۔ Chrome یا Edge میں کوشش کریں۔",
+  "Could not start the microphone. Check your browser’s microphone permission.": "مائیکروفون شروع نہیں ہو سکا۔ براؤزر میں مائیکروفون کی اجازت چیک کریں۔",
+  "Voice recognition for this language is not available in your browser. Choose another language or type your question.": "آپ کے براؤزر میں اس زبان کی آواز کی شناخت دستیاب نہیں۔ دوسری زبان منتخب کریں یا سوال لکھیں۔",
+  "Microphone access was blocked. Allow microphone access in your browser’s site settings.": "مائیکروفون کی اجازت بند ہے۔ براؤزر کی سائٹ ترتیبات میں اجازت دیں۔",
+  "Can’t connect to the Gohar server. Start the backend and try again.": "گوہر سرور سے رابطہ نہیں ہو رہا۔ بیک اینڈ شروع کرکے دوبارہ کوشش کریں۔",
+  "Could not send your question. Please try again.": "آپ کا سوال نہیں بھیجا جا سکا۔ دوبارہ کوشش کریں۔",
+  "Your speech is in the box—review it, then send.": "آپ کی آواز کا متن درج ہے—جائزہ لے کر بھیجیں۔",
+  "No speech detected. Tap the microphone and try again.": "آواز نہیں سنی گئی۔ مائیکروفون دبا کر دوبارہ بولیں۔",
+  "Listen to answer": "جواب سنیں",
+  "Source": "ماخذ",
+  "AI model unavailable": "اے آئی ماڈل دستیاب نہیں",
+  "Gohar AI": "گوہر اے آئی",
+  "New conversation": "نئی گفتگو",
+  "RECENT CHATS": "حالیہ گفتگو",
+  "Your conversations will appear here.": "آپ کی گفتگو یہاں دکھائی دے گی۔",
+  "Open chat history": "گفتگو کی تاریخ کھولیں",
+  "Growing season": "فصل کا موسم",
+  "Choose season (optional)": "موسم منتخب کریں (اختیاری)",
+  "Ask Gohar": "گوہر سے پوچھیں",
+  "Season & fertilizer guide": "موسم اور کھاد کی رہنمائی",
+  "YOUR FARMING ASSISTANT": "آپ کا زرعی معاون",
+  "RECENT CHATS": "حالیہ گفتگو",
+  "Your conversations will appear here.": "آپ کی گفتگو یہاں دکھائی دے گی۔",
+  "Season alerts & fertilizer guide": "موسمی رہنمائی اور کھاد کا مشورہ",
+  "Choose a season and crop to see practical checks, nutrient roles and trusted references.": "عملی جانچ، غذائی اجزا کے کردار اور مستند معلومات کے لیے موسم اور فصل منتخب کریں۔",
+  "SEASON WATCH": "موسم پر نظر",
+  "Seasonal field checklist": "موسم کے مطابق کھیت کی فہرست",
+  "Kharif · Monsoon": "خریف · برسات",
+  "Rabi · Winter": "ربیع · سردی",
+  "Zaid · Summer": "زائد · گرمی",
+  "Seasonal reminders, not live weather or pest alerts. Check the local KVK/IMD advisory before acting.": "یہ موسمی یاددہانیاں ہیں، براہِ راست موسم یا کیڑوں کی اطلاع نہیں۔ عمل سے پہلے مقامی زرعی مرکز کی ہدایت دیکھیں۔",
+  "CROP NUTRITION": "فصل کی غذائیت",
+  "Best fertilizer sources, by crop": "فصل کے لحاظ سے کھاد کے ذرائع",
+  "Choose crop": "فصل منتخب کریں",
+  "There is no single “best fertilizer” for every field. Use your Soil Health Card and crop/region package for rates; confirm unfamiliar products with a KVK or agriculture officer.": "ہر کھیت کے لیے ایک ہی بہترین کھاد نہیں ہوتی۔ مقدار کے لیے مٹی کی صحت کا کارڈ اور مقامی زرعی سفارشات دیکھیں؛ غیر مانوس مصنوعات کی تصدیق زرعی افسر سے کریں۔",
+  "Wheat · गेहूँ": "گندم",
+  "Rice · धान": "چاول",
+  "Maize · मक्का": "مکئی",
+  "Mustard · सरसों": "سرسوں",
+  "Pulses · दलहन": "دالیں",
+  "English": "انگریزی",
+};
+if (!uiTranslations.ur) uiTranslations.ur = {};
+Object.assign(uiTranslations.ur, BUILT_IN_URDU_UI);
+const BUILT_IN_MARATHI_UI = {
+  "✦ &nbsp; FARMING GUIDANCE IN YOUR LANGUAGE": "✦ &nbsp; तुमच्या भाषेत शेतीविषयक मार्गदर्शन",
+  "Hello, <em>farmer!</em>": "नमस्कार, <em>शेतकरी मित्रा!</em>",
+  "What’s happening in your field today? Ask Gohar a question.<br>Gohar can help you understand farming information.": "आज तुमच्या शेतात काय समस्या आहे? गोहरला प्रश्न विचारा.<br>शेतीविषयक माहिती समजून घेण्यासाठी गोहर मदत करेल.",
+  "Type your question here…": "तुमचा प्रश्न येथे लिहा…",
+  "✦ Ask in Hindi, Awadhi, or English": "✦ हिंदी, अवधी किंवा इंग्रजीत विचारा",
+  "Listening… speak now": "ऐकत आहे… आता बोला",
+  "Gohar is preparing an answer…": "गोहर उत्तर तयार करत आहे…",
+  "Ask by voice": "बोलून प्रश्न विचारा",
+  "Send question": "प्रश्न पाठवा",
+  "Farm details": "शेताची माहिती",
+  "(optional)": "(ऐच्छिक)",
+  "Crop": "पीक",
+  "e.g. wheat": "उदा. गहू",
+  "Speak crop name": "पिकाचे नाव बोला",
+  "Village / district": "गाव / जिल्हा",
+  "Village or district": "गाव किंवा जिल्हा",
+  "Speak village or district": "गाव किंवा जिल्हा बोला",
+  "Crop age / stage": "पिकाचे वय / अवस्था",
+  "e.g. 30 days, flowering": "उदा. ३० दिवस, फुलोरा",
+  "Speak crop age or stage": "पिकाचे वय किंवा अवस्था बोला",
+  "Problem / symptoms": "समस्या / लक्षणे",
+  "What changes are you seeing?": "तुम्हाला कोणते बदल दिसत आहेत?",
+  "Speak the crop problem or symptoms": "पिकाची समस्या किंवा लक्षणे बोला",
+  "Crop problem": "पिकाची समस्या",
+  "Yellow leaves or slow growth": "पाने पिवळी किंवा वाढ मंद",
+  "Fertilizer advice": "खताचा सल्ला",
+  "Timing and crop stage": "वेळ आणि पिकाची अवस्था",
+  "Weather information": "हवामानाची माहिती",
+  "Rain and precautions": "पाऊस आणि काळजी",
+  "Pests and disease": "किडी आणि रोग",
+  "Possible causes and next steps": "संभाव्य कारणे आणि पुढील उपाय",
+  "Why are my wheat leaves turning yellow?": "गव्हाची पाने पिवळी का पडत आहेत?",
+  "When and how should I fertilize wheat?": "गव्हाला खत कधी आणि कसे द्यावे?",
+  "How can I check weather information for my farm?": "माझ्या शेतासाठी हवामानाची माहिती कशी पाहू?",
+  "What should I check if I see pests on mustard?": "मोहरीच्या पिकावर कीड दिसल्यास काय तपासावे?",
+  "Farmer and field details": "शेतकरी आणि शेताची माहिती",
+  "Question": "प्रश्न",
+  "Voice input is unavailable in this browser. Try Chrome or Edge.": "या ब्राउझरमध्ये आवाजाद्वारे प्रश्न विचारता येत नाही. Chrome किंवा Edge वापरून पाहा.",
+  "Could not start the microphone. Check your browser’s microphone permission.": "मायक्रोफोन सुरू झाला नाही. ब्राउझरमधील मायक्रोफोन परवानगी तपासा.",
+  "Voice recognition for this language is not available in your browser. Choose another language or type your question.": "तुमच्या ब्राउझरमध्ये या भाषेची आवाज ओळख उपलब्ध नाही. दुसरी भाषा निवडा किंवा प्रश्न लिहा.",
+  "Microphone access was blocked. Allow microphone access in your browser’s site settings.": "मायक्रोफोनची परवानगी बंद आहे. ब्राउझरच्या साइट सेटिंग्जमध्ये परवानगी द्या.",
+  "Can’t connect to the Gohar server. Start the backend and try again.": "गोहर सर्व्हरशी जोडता येत नाही. बॅकएंड सुरू करून पुन्हा प्रयत्न करा.",
+  "Could not send your question. Please try again.": "तुमचा प्रश्न पाठवता आला नाही. कृपया पुन्हा प्रयत्न करा.",
+  "Your speech is in the box—review it, then send.": "तुमचे बोलणे मजकूरात आले आहे—तपासून पाठवा.",
+  "No speech detected. Tap the microphone and try again.": "आवाज ऐकू आला नाही. मायक्रोफोन दाबून पुन्हा बोला.",
+  "Listen to answer": "उत्तर ऐका",
+  "Source": "स्रोत",
+  "AI model unavailable": "एआय मॉडेल उपलब्ध नाही",
+  "Gohar AI": "गोहर एआय",
+  "New conversation": "नवीन संभाषण",
+  "RECENT CHATS": "अलीकडील संभाषणे",
+  "Your conversations will appear here.": "तुमची संभाषणे येथे दिसतील.",
+  "Open chat history": "संभाषणाचा इतिहास उघडा",
+  "Growing season": "हंगाम",
+  "Choose season (optional)": "हंगाम निवडा (ऐच्छिक)",
+  "Ask Gohar": "गोहरला विचारा",
+  "Season & fertilizer guide": "हंगाम आणि खत मार्गदर्शक",
+  "YOUR FARMING ASSISTANT": "तुमचा शेती सहाय्यक",
+  "Season alerts & fertilizer guide": "हंगामी सूचना आणि खत मार्गदर्शक",
+  "Choose a season and crop to see practical checks, nutrient roles and trusted references.": "उपयुक्त तपासण्या, पोषक घटकांची माहिती आणि विश्वसनीय संदर्भ पाहण्यासाठी हंगाम व पीक निवडा.",
+  "SEASON WATCH": "हंगामावर लक्ष",
+  "Seasonal field checklist": "हंगामानुसार शेत तपासणी",
+  "Kharif · Monsoon": "खरीप · पावसाळा",
+  "Rabi · Winter": "रब्बी · हिवाळा",
+  "Zaid · Summer": "उन्हाळी · उन्हाळा",
+  "CROP NUTRITION": "पीक पोषण",
+  "Best fertilizer sources, by crop": "पिकानुसार खतांचे स्रोत",
+  "Choose crop": "पीक निवडा",
+  "There is no single “best fertilizer” for every field. Use your Soil Health Card and crop/region package for rates; confirm unfamiliar products with a KVK or agriculture officer.": "प्रत्येक शेतासाठी एकच सर्वोत्तम खत नसते. मात्रेसाठी मृदा आरोग्य पत्रिका आणि स्थानिक पीक शिफारसी पाहा; अपरिचित उत्पादनाची कृषी अधिकाऱ्याकडून खात्री करा.",
+  "Wheat · गेहूँ": "गहू",
+  "Rice · धान": "भात",
+  "Maize · मक्का": "मका",
+  "Mustard · सरसों": "मोहरी",
+  "Pulses · दलहन": "कडधान्ये",
+  "English": "इंग्रजी",
+};
+if (!uiTranslations.mr) uiTranslations.mr = {};
+Object.assign(uiTranslations.mr, BUILT_IN_MARATHI_UI);
 let localizationRevision = 0;
 try {
   const savedTranslations = JSON.parse(localStorage.getItem(UI_TRANSLATION_CACHE_KEY) || "{}");
-  if (savedTranslations && typeof savedTranslations === "object" && !Array.isArray(savedTranslations)) uiTranslations = savedTranslations;
+  if (savedTranslations && typeof savedTranslations === "object" && !Array.isArray(savedTranslations)) {
+    uiTranslations = {
+      ...savedTranslations,
+      ...uiTranslations,
+      ur: { ...(savedTranslations.ur || {}), ...(uiTranslations.ur || {}) },
+      mr: { ...(savedTranslations.mr || {}), ...(uiTranslations.mr || {}) },
+    };
+  }
 } catch { /* The language cache is optional. */ }
 
 function translateCopy(value, translations) {
@@ -250,6 +436,17 @@ async function localizeInterface() {
     document.querySelector("#languageNotice")?.classList.remove("visible");
     return;
   }
+  if (["ur", "mr"].includes(target)) {
+    // Urdu and Marathi labels are bundled with the frontend and remain available offline.
+    applyLanguage();
+    renderHistory();
+    collectInterfaceParts().forEach((part) => {
+      if (part.connected() && uiTranslations[target][part.source]) part.set(uiTranslations[target][part.source]);
+    });
+    document.title = cachedTranslation(document.documentElement.dataset.goharTitleSource || document.title, target);
+    document.querySelector("#languageNotice")?.classList.remove("visible");
+    return;
+  }
   const parts = collectInterfaceParts().filter((part) => target !== "hi" || /[A-Za-z]/.test(part.source));
   const copyStrings = target === "hi" ? [] : Object.entries(copy.en).filter(([key]) => !["eyebrow", "title", "intro"].includes(key)).flatMap(([, value]) => {
     const collect = (item) => typeof item === "string" ? [item] : Array.isArray(item) ? item.flatMap(collect) : item && typeof item === "object" ? Object.values(item).flatMap(collect) : [];
@@ -258,6 +455,7 @@ async function localizeInterface() {
   const dynamicStrings = [
     "Just now", "{count} minutes ago", "{count} hours ago", "Yesterday", "Conversation",
     "Connection issue", "Voice input", "Microphone", "Couldn’t translate the interface. Check Ollama and try again.",
+    "✦ Reply language: " + LANGUAGES[target].native + " · Voice: " + LANGUAGES[target].native,
   ];
   try {
     const allStrings = [...parts.map((part) => part.source), ...copyStrings, ...dynamicStrings];
@@ -281,10 +479,10 @@ async function localizeInterface() {
 
 function applyLanguage() {
   const text = words();
-  const richText = language === "hi" || language === "en" ? text : copy.en;
+  const richText = text;
   const languageSelect = document.querySelector("#languageSelect");
   document.documentElement.lang = language;
-  document.documentElement.dir = ["ur", "sd", "ks"].includes(language) ? "rtl" : "ltr";
+  document.documentElement.dir = LANGUAGES[language].direction;
   languageSelect.value = language;
   languageSelect.setAttribute("aria-label", language === "hi" ? "जवाब और आवाज़ की भाषा चुनें" : "Choose reply and voice language");
   languageSelect.title = "Choose one of 20 languages for Gohar replies and voice input";
@@ -624,6 +822,12 @@ async function sendQuestion(question) {
   const apiQuestion = [cleanQuestion, farmContext].filter(Boolean).join("\n\n").slice(0, 1500);
   showConversation();
   addMessage(displayText, "user");
+  const activeChat = chatHistory.find((chat) => chat.id === activeChatId);
+  const history = (activeChat?.messages || [])
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .slice(0, -1)
+    .slice(-8)
+    .map((message) => ({ role: message.role, content: message.text.slice(0, 1500) }));
   input.value = "";
   input.style.height = "auto";
   setBusy(true);
@@ -632,7 +836,7 @@ async function sendQuestion(question) {
     const response = await fetch(`${API_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: apiQuestion, language }),
+      body: JSON.stringify({ question: apiQuestion, language, language_name: LANGUAGES[language].name, history }),
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -666,78 +870,134 @@ async function sendQuestion(question) {
 }
 
 function stopListening() {
-  if (recognition && isListening) recognition.stop();
+  if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
 }
 
-function startListening(target = input, button = voiceButton) {
-  if (!Recognition) {
-    showConversation();
-    addMessage(words().openError, "assistant error", "Voice input");
-    return;
+function audioBufferToWav(buffer) {
+  const targetRate = 16000;
+  const sourceRate = buffer.sampleRate;
+  const frameCount = Math.ceil(buffer.length * targetRate / sourceRate);
+  const pcm = new ArrayBuffer(44 + frameCount * 2);
+  const view = new DataView(pcm);
+  const writeText = (offset, value) => [...value].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)));
+  writeText(0, "RIFF");
+  view.setUint32(4, 36 + frameCount * 2, true);
+  writeText(8, "WAVE");
+  writeText(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, targetRate, true);
+  view.setUint32(28, targetRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeText(36, "data");
+  view.setUint32(40, frameCount * 2, true);
+  const channels = Array.from({ length: buffer.numberOfChannels }, (_, index) => buffer.getChannelData(index));
+  for (let i = 0; i < frameCount; i += 1) {
+    const sourceIndex = Math.min(buffer.length - 1, Math.floor(i * sourceRate / targetRate));
+    let sample = channels.reduce((sum, channel) => sum + channel[sourceIndex], 0) / channels.length;
+    sample = Math.max(-1, Math.min(1, sample));
+    view.setInt16(44 + i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
   }
+  return new Uint8Array(pcm);
+}
+
+async function transcribeRecording(chunks, target, button) {
+  const blob = new Blob(chunks, { type: mediaRecorder?.mimeType || "audio/webm" });
+  if (!blob.size) throw new Error("No audio was recorded. Check the microphone and try again.");
+  const audioContext = new AudioContext();
+  try {
+    const decoded = await audioContext.decodeAudioData(await blob.arrayBuffer());
+    const wav = audioBufferToWav(decoded);
+    let binary = "";
+    for (let offset = 0; offset < wav.length; offset += 0x8000) {
+      binary += String.fromCharCode(...wav.subarray(offset, offset + 0x8000));
+    }
+    const response = await fetch(API_URL + "/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language, audio_base64: btoa(binary) }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || ("Transcription failed (" + response.status + ")."));
+    target.value = (data.text || "").trim();
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    if (!target.value) throw new Error("No speech was detected. Please try speaking closer to the microphone.");
+    if (target === input) hint.textContent = words().transcriptReady;
+  } finally {
+    await audioContext.close();
+    mediaStream?.getTracks().forEach((track) => track.stop());
+    mediaStream = null;
+    button.classList.remove("listening");
+    button.textContent = button === voiceButton ? words().mic : "🎙";
+    activeTarget = null;
+    activeMicButton = null;
+    isListening = false;
+  }
+}
+
+async function startListening(target = input, button = voiceButton) {
   if (isListening) {
     stopListening();
     return;
   }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder || !window.AudioContext) {
+    showConversation();
+    addMessage("माइक के लिए Chrome या Edge में localhost खोलें और साइट को microphone access दें।", "assistant error", "Voice input");
+    return;
+  }
   activeTarget = target;
   activeMicButton = button;
-  voiceDraft = "";
-  voiceNoSpeech = false;
   target.value = "";
-  recognition = new Recognition();
-  recognition.lang = LANGUAGES[language].voice;
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.onstart = () => {
-    isListening = true;
-    button.classList.add("listening");
-    button.textContent = "■";
-    if (target === input) hint.textContent = words().listening;
-  };
-  recognition.onresult = (event) => {
-    let finalText = "";
-    let interimText = "";
-    for (let index = event.resultIndex; index < event.results.length; index += 1) {
-      const transcript = event.results[index][0].transcript;
-      if (event.results[index].isFinal) finalText += transcript;
-      else interimText += transcript;
-    }
-    voiceDraft += finalText;
-    target.value = `${voiceDraft}${interimText}`.trim();
-    if (target === input) {
-      target.style.height = "auto";
-      target.style.height = `${Math.min(target.scrollHeight, 130)}px`;
-    }
-  };
-  recognition.onerror = (event) => {
-    if (event.error === "no-speech") {
-      voiceNoSpeech = true;
-      return;
-    }
-    if (event.error !== "aborted") {
-      showConversation();
-      const message = event.error === "language-not-supported" ? words().voiceLanguageError
-        : event.error === "not-allowed" || event.error === "service-not-allowed" ? words().micDenied
-          : words().micError;
-      addMessage(message, "assistant error", "Microphone");
-    }
-  };
-  recognition.onend = () => {
-    isListening = false;
-    button.classList.remove("listening");
-    button.textContent = button === voiceButton ? words().mic : "🎙";
-    const spokenText = target.value.trim();
-    activeTarget = null;
-    activeMicButton = null;
-    if (target === input) hint.textContent = spokenText ? words().transcriptReady : voiceNoSpeech ? words().noSpeech : questionHint();
-    voiceNoSpeech = false;
-  };
   try {
-    recognition.start();
-  } catch {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+    const recorder = new MediaRecorder(mediaStream);
+    mediaRecorder = recorder;
+    const chunks = [];
+    recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+    recorder.onstart = () => {
+      isListening = true;
+      button.classList.add("listening");
+      button.textContent = "■";
+      if (target === input) hint.textContent = "रिकॉर्डिंग… रोकने के लिए फिर माइक दबाएँ (अधिकतम 20 सेकंड)";
+    };
+    recorder.onerror = () => {
+      mediaStream?.getTracks().forEach((track) => track.stop());
+      mediaStream = null;
+      isListening = false;
+      button.classList.remove("listening");
+      button.textContent = button === voiceButton ? words().mic : "🎙";
+      showConversation();
+      addMessage("माइक रिकॉर्डिंग विफल हुई। ब्राउज़र की microphone permission जाँचें।", "assistant error", "Microphone");
+    };
+    recorder.onstop = async () => {
+      showConversation();
+      if (target === input) hint.textContent = "Gemma आपकी आवाज़ को स्थानीय रूप से लिख रहा है…";
+      try {
+        await transcribeRecording(chunks, target, button);
+      } catch (error) {
+        mediaStream?.getTracks().forEach((track) => track.stop());
+        mediaStream = null;
+        isListening = false;
+        button.classList.remove("listening");
+        button.textContent = button === voiceButton ? words().mic : "🎙";
+        addMessage(error.message || "आवाज़ लिखने में विफलता।", "assistant error", "Offline transcription");
+      }
+    };
+    recorder.start();
+    window.setTimeout(() => {
+      if (mediaRecorder === recorder && recorder.state === "recording") recorder.stop();
+    }, 20000);
+  } catch (error) {
     isListening = false;
+    mediaStream?.getTracks().forEach((track) => track.stop());
+    mediaStream = null;
     showConversation();
-    addMessage(words().micError, "assistant error", "Microphone");
+    const message = error.name === "NotAllowedError" || error.name === "SecurityError"
+      ? "माइक की अनुमति बंद है। Chrome/Edge में localhost के पास site settings खोलकर Microphone को Allow करें।"
+      : "माइक उपलब्ध नहीं है। जाँचें कि यह दूसरे ऐप में इस्तेमाल नहीं हो रहा है।";
+    addMessage(message, "assistant error", "Microphone");
   }
 }
 
@@ -836,3 +1096,4 @@ restoreInterfaceSources();
 applyLanguage();
 renderHistory();
 void localizeInterface();
+
